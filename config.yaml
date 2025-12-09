@@ -1,0 +1,140 @@
+channels:
+
+- "@forallqa"
+- "@qa_work"
+- "@jobforqa"
+- "@testerrjob"
+- "@qa_rab"
+- "@qa_hcareers_jobs"
+- "@qa_jobs_rabota"
+- "@easy_qa_jobs"
+- "@qa_job_geeklink"
+- "@rabota_testirovshchik"
+- "@rabota_testirovshchiko"
+- "@rabota_testirovshchike"
+- "@Remoteit"
+- "@qa_chillout_jobs"
+- "@qarocks"
+- "@YotolabQA"
+- "@qajoboffer"
+- "@it_match_qa"
+
+
+
+target_chat_id: -1003309146574
+
+markers:
+  excellent_markers:
+    - "qa"
+    - "sql"
+    - "agile"
+    - "scrum"
+    - "kanban"
+    - "api"
+    - "postgress"
+    - "sqlite"
+    - "postrgressql"
+    - "swagger"
+    - "middle"
+    - "devtools"
+    - "rest"
+    - "jira"
+    - "postman"
+    - "api testing"
+    - "manual"
+    - "test engineer"
+    - "qa engineer"
+    - "allure"
+    - "backend"
+    - "quality assurance"
+    - "functional testing"
+
+  acceptable_markers:
+
+    - "grafana"
+    - "restassured"
+    - "gitlab"
+    - "charles"
+    - "git"
+    - "selenium"
+    - "mysql"
+    - "linux"
+    - "тестировщиков"
+
+  negative_markers:
+    - "freelance"
+    - "contract"
+    - "part-time"
+    - "maven"
+    - "gradle"
+    - "docker"
+    - "ci/cd "
+    - "soap"
+    - "java"
+    - "junit"
+    - "автоматизация"
+
+
+  strong_negative_markers:
+    - "c#"
+    - ".NET"
+    - "fullstack"
+    - "android"
+    - "ios"
+    - "junior"
+    - "javascript"
+    - "jmeter"
+    - "cypress"
+    - "typescript"
+    - "mobile"
+    - "python"
+    - "webdriver"
+    - "kafka"
+    - "automation engineer"
+    - "test automation"
+    - "python"
+    - "pytest"
+    - "playwright"
+    - "kotlin"
+    - "aqa"
+    - "jenkins"
+    - "teamcity"
+
+  ignore_markers:
+    - "intern"
+    - "стажировка"
+    - "trainee"
+    - "gaming"
+    - "game"
+    - "gamedev"
+    - "крипто"
+    - "crypto"
+    - "pentester"
+    - "pentest"
+    - "подборка"
+    - "реклама"
+    - "курс"
+    - "backend developer"
+    - "frontend developer"
+    - "урок"
+
+min_salary: 0
+
+min_salary: 0
+
+thresholds:
+  target: 4         # final_score >= 4 -> "Хорошее совпадение" (настраиваемо)
+  alternative: 2    # final_score >= 2 -> "Альтернативная"
+  maybe: 1          # final_score >= 1 -> "Похоже — надо вчитаться"
+
+context_keywords:
+  required:
+    - "требования"
+    - "must"
+    - "required"
+    - "обязательно"
+    - "нужен"
+  desirable:
+    - "желательно"
+    - "nice to have"
+    - "prefer"
