@@ -2,11 +2,61 @@ import os
 import json
 import yaml
 import sqlite3
+import pymorphy2
 from datetime import datetime, timedelta
 from telethon import TelegramClient
 from pathlib import Path
 from dotenv import load_dotenv
 from score import score_and_classify
+
+# -----
+morph = pymorphy2.MorphAnalyzer()
+
+def normalize_word_ru(word: str) -> str:
+    """Лемматизация для русских слов; возвращает нормальную форму в нижнем регистре."""
+    try:
+        return morph.parse(word)[0].normal_form.lower()
+    except Exception:
+        return word.lower()
+
+def build_emoji_bar(score: int, max_slots: int = 3) -> str:
+    """Возвращает шкалу из green/yellow hearts длиной max_slots.
+    score 0..max_slots -> number of green hearts.
+    Если score <=0 — 0 green (все желтые).
+    """
+    if score is None or score <= 0:
+        green = 0
+    else:
+        green = min(score, max_slots)
+    yellow = max_slots - green
+    return "🟩" * green + "🟨" * yellow
+
+def format_post_block(item: dict) -> str:
+    """
+    Форматирует один пост в текст для отправки в канал.
+    Ожидаемые поля item: channel, msg_id, pos, neg, final, summary, preview
+    """
+    channel = item.get('channel', '')
+    msg_id = item.get('msg_id')
+    # ссылка на пост
+    channel_name = channel.replace('@', '')
+    post_link = f"https://t.me/{channel_name}/{msg_id}"
+    # рейтинг
+    pos = item.get('pos', 0)
+    neg = item.get('neg', 0)
+    final = item.get('final', 0) or 0
+    summary = item.get('summary', '')
+    emoji_bar = build_emoji_bar(final, max_slots=3)
+    # Формируем блок в порядке: источник+ссылка, рейтинг и шкала, заголовок "Содержание", сам текст, разделитель
+    lines = []
+    lines.append(f"Источник: {channel} | Ссылка на пост ({post_link})\n")
+    lines.append(f"Подсчет рейтинга: :arrow_up: {pos}  |  :arrow_down: {neg}  | Итого {final}")
+    lines.append(f"Итог: {summary} {emoji_bar}\n")
+    lines.append("Содержание сообщения\n====================\n")
+    lines.append(item.get('preview', ''))
+    lines.append("\n_________________________")
+    return "\n".join(lines)
+
 
 # ================= 1.0 LOAD ENV =================
 # print("=== DEBUG START ===")
@@ -139,6 +189,28 @@ async def scan_history(client: TelegramClient, hours: int = 24, limit_per_channe
             processed += 1
         print(f"[scan_history] {ch} обработано ~{processed} сообщений")
     return results
+
+
+async def send_results(client, results: list, target_chat_id, batch_size: int = 5, pause_sec: float = 2.0):
+    """Форматирует и отправляет результаты пакетами в целевой чат."""
+    if not results:
+        await client.send_message(target_chat_id, "Ничего релевантного за период не найдено.")
+        return
+
+    # сортируем по скору (больше — лучше); None (ignore) — ставим в конец
+    results.sort(key=lambda r: (r['final'] if r['final'] is not None else -999), reverse=True)
+
+    for i in range(0, len(results), batch_size):
+        chunk = results[i:i+batch_size]
+        blocks = [format_post_block(r) for r in chunk]
+        msg_text = "\n\n".join(blocks)
+        try:
+            await client.send_message(target_chat_id, msg_text)
+        except Exception as e:
+            print(f"[send_results] Ошибка при отправке: {e}")
+        await asyncio.sleep(pause_sec)
+
+    print(f"[send_results] Отправлено {len(results)} элементов в {target_chat_id}.")
 
 # ================= 5.0 FETCH MESSAGES =================
 async def fetch_messages(hours: int = 24, batch_size: int = 5):
