@@ -2,7 +2,8 @@ import os
 import json
 import yaml
 import sqlite3
-import pymorphy2
+
+import asyncio
 from datetime import datetime, timedelta
 from telethon import TelegramClient
 from pathlib import Path
@@ -10,14 +11,9 @@ from dotenv import load_dotenv
 from score import score_and_classify
 
 # -----
-morph = pymorphy2.MorphAnalyzer()
 
-def normalize_word_ru(word: str) -> str:
-    """Лемматизация для русских слов; возвращает нормальную форму в нижнем регистре."""
-    try:
-        return morph.parse(word)[0].normal_form.lower()
-    except Exception:
-        return word.lower()
+
+
 
 def build_emoji_bar(score: int, max_slots: int = 3) -> str:
     """Возвращает шкалу из green/yellow hearts длиной max_slots.
@@ -213,11 +209,7 @@ async def send_results(client, results: list, target_chat_id, batch_size: int = 
     print(f"[send_results] Отправлено {len(results)} элементов в {target_chat_id}.")
 
 # ================= 5.0 FETCH MESSAGES =================
-async def fetch_messages(hours: int = 24, batch_size: int = 5):
-    """
-    Сканирует указанные каналы за последние `hours` часов,
-    применяет scoring и отправляет результаты в TARGET_CHAT.
-    """
+""" async def fetch_messages(hours: int = 24, batch_size: int = 5):
     print(f"[fetch_messages] Сканирование каналов за последние {hours} часов…")
     results = await scan_history(client, hours=hours)
 
@@ -247,7 +239,51 @@ async def fetch_messages(hours: int = 24, batch_size: int = 5):
         # Пауза, чтобы не ловить FloodWaitError
         await asyncio.sleep(2)
 
-    print(f"[fetch_messages] Отправлено {len(results)} сообщений в чат {TARGET_CHAT}.")
+    print(f"[fetch_messages] Отправлено {len(results)} сообщений в чат {TARGET_CHAT}.") """
+
+async def fetch_messages(hours: int = 24, batch_size: int = 5):
+    """
+    Запускает сканирование истории каналов за последние `hours` часов,
+    записывает в БД (scan_history делает это) и после формирует/отправляет отчёт.
+    """
+    print(f"[fetch_messages] Сканирование каналов за последние {hours} часов…")
+    # scan_history должен вернуть список результатов с ожидаемыми полями
+    results = await scan_history(client, hours=hours)
+
+    if not results:
+        print("[fetch_messages] Релевантных сообщений не найдено.")
+        # отправляем в чат уведомление о пустой выборке
+        await client.send_message(TARGET_CHAT, "Ничего релевантного за период не найдено.")
+        return
+
+    # вызов общей функции отправки/форматирования
+    await send_results(client, results, TARGET_CHAT, batch_size=batch_size, pause_sec=2.0)
+
+
+async def send_results(client, results: list, target_chat_id, batch_size: int = 5, pause_sec: float = 2.0):
+    """
+    Форматирует и отправляет результаты пакетами в target_chat_id.
+    results — список dict, каждый dict содержит поля channel, msg_id, pos, neg, final, summary, preview.
+    """
+    if not results:
+        await client.send_message(target_chat_id, "Ничего релевантного за период не найдено.")
+        return
+
+    # сортируем по финальному скору (None — в конец)
+    results.sort(key=lambda r: (r.get('final') if r.get('final') is not None else -999), reverse=True)
+
+    for i in range(0, len(results), batch_size):
+        chunk = results[i:i+batch_size]
+        blocks = [format_post_block(r) for r in chunk]
+        msg_text = "\n\n".join(blocks)
+        try:
+            await client.send_message(target_chat_id, msg_text)
+        except Exception as e:
+            print(f"[send_results] Ошибка при отправке: {e}")
+        # пауза между пакетами, чтобы уменьшить риск FloodWait
+        await asyncio.sleep(pause_sec)
+
+    print(f"[send_results] Отправлено {len(results)} элементов в {target_chat_id}.")
 
 # ================= 6.0 MAIN =================
 async def main():
