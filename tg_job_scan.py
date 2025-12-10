@@ -9,7 +9,7 @@ from telethon import TelegramClient
 from pathlib import Path
 from dotenv import load_dotenv
 from score import score_and_classify
-
+from collections import Counter
 # -----
 
 
@@ -187,59 +187,7 @@ async def scan_history(client: TelegramClient, hours: int = 24, limit_per_channe
     return results
 
 
-async def send_results(client, results: list, target_chat_id, batch_size: int = 5, pause_sec: float = 2.0):
-    """Форматирует и отправляет результаты пакетами в целевой чат."""
-    if not results:
-        await client.send_message(target_chat_id, "Ничего релевантного за период не найдено.")
-        return
-
-    # сортируем по скору (больше — лучше); None (ignore) — ставим в конец
-    results.sort(key=lambda r: (r['final'] if r['final'] is not None else -999), reverse=True)
-
-    for i in range(0, len(results), batch_size):
-        chunk = results[i:i+batch_size]
-        blocks = [format_post_block(r) for r in chunk]
-        msg_text = "\n\n".join(blocks)
-        try:
-            await client.send_message(target_chat_id, msg_text)
-        except Exception as e:
-            print(f"[send_results] Ошибка при отправке: {e}")
-        await asyncio.sleep(pause_sec)
-
-    print(f"[send_results] Отправлено {len(results)} элементов в {target_chat_id}.")
-
 # ================= 5.0 FETCH MESSAGES =================
-""" async def fetch_messages(hours: int = 24, batch_size: int = 5):
-    print(f"[fetch_messages] Сканирование каналов за последние {hours} часов…")
-    results = await scan_history(client, hours=hours)
-
-    if not results:
-        print("[fetch_messages] Релевантных сообщений не найдено.")
-        await client.send_message(TARGET_CHAT, "Ничего релевантного за период не найдено.")
-        return
-
-    # Сортируем по финальному скору (desc)
-    results.sort(key=lambda r: r['final'], reverse=True)
-
-    # Отправка пакетами
-    for i in range(0, len(results), batch_size):
-        chunk = results[i:i+batch_size]
-        lines = []
-        for r in chunk:
-            lines.append(
-                f"Источник: {r['channel']} | id: {r['msg_id']}\n"
-                f"Рейтинг: {r['final']} (+{r['pos']}/-{r['neg']}) | Итог: {r['summary']}\n"
-                f"{r['preview']}\n---\n"
-            )
-        msg_text = "\n".join(lines)
-        try:
-            await client.send_message(TARGET_CHAT, msg_text)
-        except Exception as e:
-            print(f"[fetch_messages] Ошибка при отправке: {e}")
-        # Пауза, чтобы не ловить FloodWaitError
-        await asyncio.sleep(2)
-
-    print(f"[fetch_messages] Отправлено {len(results)} сообщений в чат {TARGET_CHAT}.") """
 
 async def fetch_messages(hours: int = 24, batch_size: int = 5):
     """
@@ -260,11 +208,8 @@ async def fetch_messages(hours: int = 24, batch_size: int = 5):
     await send_results(client, results, TARGET_CHAT, batch_size=batch_size, pause_sec=2.0)
 
 
-async def send_results(client, results: list, target_chat_id, batch_size: int = 5, pause_sec: float = 2.0):
-    """
-    Форматирует и отправляет результаты пакетами в target_chat_id.
-    results — список dict, каждый dict содержит поля channel, msg_id, pos, neg, final, summary, preview.
-    """
+""" async def send_results(client, results: list, target_chat_id, batch_size: int = 5, pause_sec: float = 2.0):
+
     if not results:
         await client.send_message(target_chat_id, "Ничего релевантного за период не найдено.")
         return
@@ -283,7 +228,104 @@ async def send_results(client, results: list, target_chat_id, batch_size: int = 
         # пауза между пакетами, чтобы уменьшить риск FloodWait
         await asyncio.sleep(pause_sec)
 
-    print(f"[send_results] Отправлено {len(results)} элементов в {target_chat_id}.")
+    print(f"[send_results] Отправлено {len(results)} элементов в {target_chat_id}.") """
+
+MESSAGE_LIMIT = 4000  # безопасный лимит (Telegram ~4096)
+
+def _truncate_to_fit(block: str, limit: int = MESSAGE_LIMIT) -> str:
+    if len(block) <= limit:
+        return block
+    # аккуратно обрезаем контент — пробуем обрезать preview (последняя часть блока)
+    # предполагаем, что preview в блоке идёт в конце, и есть маркер разделения перед ним
+    trunc = block[:limit - 1]  # простая обрезка
+    # стараемся не резать середину эмодзи/UTF-8, но Python строка — безопасно
+    return trunc + "\n…"
+
+async def send_results(client, results: list, target_chat_id, batch_size=None, pause_sec: float = 1.2):
+
+    """
+    Надёжная отправка результатов:
+    - сначала отправляет заглавный отчет о запуске,
+    - затем посты по одному (с обрезкой если нужно),
+    - в конце итоговый отчет с реальными счетчиками.
+    """
+    total = len(results)
+    if total == 0:
+        await client.send_message(target_chat_id, "Ничего релевантного за период не найдено.")
+        print("[send_results] Нечего отправлять.")
+        return
+
+    # Считаем статистику до отправки
+    counts_by_summary = Counter(r.get("summary", "Нет метки") for r in results)
+    # формируем стартовый отчет
+    now = __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    header_lines = [
+        f"JobWatcher — отчёт сканирования",
+        f"Время: {now}",
+        f"Найдено: {total} пост(ов)",
+        "Распределение по итогам:"
+    ]
+    for k, v in counts_by_summary.items():
+        header_lines.append(f"  {k}: {v}")
+    header_lines.append("")  # пустая строка
+    header_text = "\n".join(header_lines)
+    try:
+        await client.send_message(target_chat_id, header_text)
+    except Exception as e:
+        print(f"[send_results] Ошибка при отправке header: {e}")
+
+    sent = 0
+    failed = 0
+    failed_items = []
+
+    # Отправляем посты по одному — так проще контролировать длину и ошибки
+    for idx, item in enumerate(results, start=1):
+        block = format_post_block(item)  # используем вашу форматирующую функцию
+        # защищаем от слишком длинного блока
+        if len(block) > MESSAGE_LIMIT:
+            # попытаемся укоротить preview внутри item и пересобрать
+            preview = item.get("preview", "")
+            # оценка длины: сколько символов нужно убрать
+            excess = len(block) - MESSAGE_LIMIT + 100  # +100 запас
+            if preview and len(preview) > excess:
+                new_preview = preview[:-excess] + "…"
+                item_short = dict(item)
+                item_short["preview"] = new_preview
+                block = format_post_block(item_short)
+            else:
+                # тупо обрезаем строку
+                block = _truncate_to_fit(block, MESSAGE_LIMIT)
+
+        try:
+            await client.send_message(target_chat_id, block)
+            sent += 1
+            if DEBUG:
+                print(f"[send_results] Sent {idx}/{total}")
+        except Exception as e:
+            failed += 1
+            failed_items.append((item.get("channel"), item.get("msg_id"), str(e)))
+            print(f"[send_results] Ошибка при отправке: {e}")
+        # пауза между сообщениями
+        await asyncio.sleep(pause_sec)
+
+    # финальный отчет
+    final_lines = [
+        f"JobWatcher — итог отправки ({now})",
+        f"Всего найдено: {total}",
+        f"Отправлено: {sent}",
+        f"Не отправлено: {failed}"
+    ]
+    if failed:
+        final_lines.append("\nСписок ошибок (канал, msg_id, ошибка):")
+        for ch, mid, err in failed_items:
+            final_lines.append(f" - {ch} {mid} — {err}")
+    final_text = "\n".join(final_lines)
+    try:
+        await client.send_message(target_chat_id, final_text)
+    except Exception as e:
+        print(f"[send_results] Ошибка при отправке финального отчёта: {e}")
+
+    print(f"[send_results] Отправлено {sent} из {total}, упало {failed}.")
 
 # ================= 6.0 MAIN =================
 async def main():
