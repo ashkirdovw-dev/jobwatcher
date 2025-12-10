@@ -14,8 +14,6 @@ from collections import Counter
 from db import DB
 # -----
 
-db = DB(DB_PATH)
-
 
 def build_emoji_bar(score: int, max_slots: int = 3) -> str:
     """Возвращает шкалу из green/yellow hearts длиной max_slots.
@@ -77,29 +75,9 @@ CHANNELS = cfg.get("channels", [])
 
 
 # ================= 3.0 - Database initialization =================
-conn = sqlite3.connect(DB_PATH)
-c = conn.cursor()
 
-# создаём таблицу заново, если не существует
-c.execute("""
-CREATE TABLE IF NOT EXISTS seen (
-    msg_unique TEXT PRIMARY KEY,
-    channel TEXT,
-    msg_id INTEGER,
-    status TEXT,
-    score INTEGER,
-    pos_sum INTEGER,
-    neg_sum INTEGER,
-    matches TEXT,
-    raw_text TEXT,
-    first_seen_ts INTEGER
-)
-""")
-conn.commit()
-
-# проверка колонок (debug)
-cols = [t[1] for t in c.execute("PRAGMA table_info(seen)")]
-print("DEBUG: columns in 'seen' table:", cols)
+db = DB(DB_PATH)
+print("DEBUG: DB initialized, columns in 'seen':", db.get_columns())
 
 
 # ================= 4.0 TELETHON =================
@@ -127,9 +105,9 @@ async def scan_history(client: TelegramClient, hours: int = 24, limit_per_channe
                 continue
 
             unique = f"{ch}::{text[:500]}"
-            cur = conn.execute("SELECT 1 FROM seen WHERE msg_unique=?", (unique,))
-            if cur.fetchone():
+            if db.has_seen(unique):
                 continue
+
 
             res = score_and_classify(text, cfg)
             final = res.get('final_score')
@@ -139,11 +117,17 @@ async def scan_history(client: TelegramClient, hours: int = 24, limit_per_channe
             matches = res.get('matches', {})
 
             status = summary if final is not None else 'Отброшено'
-            conn.execute(
-                "INSERT OR REPLACE INTO seen(msg_unique, channel, msg_id, status, score, pos_sum, neg_sum, matches, raw_text, first_seen_ts) VALUES(?,?,?,?,?,?,?,?,?,strftime('%s','now'))",
-                (unique, ch, msg.id, status, final if final is not None else None, pos_sum, neg_sum, json.dumps(matches, ensure_ascii=False), text)
+            db.upsert_seen(
+                msg_unique=unique,
+                channel=ch,
+                msg_id=msg.id,
+                status=status,
+                score=(final if final is not None else None),
+                pos_sum=pos_sum,
+                neg_sum=neg_sum,
+                matches_json=json.dumps(matches, ensure_ascii=False),
+                raw_text=text,
             )
-            conn.commit()
 
             if final is not None and not summary.startswith('Точно нет'):
                 results.append({

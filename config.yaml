@@ -99,6 +99,7 @@ markers:
     - "aqa"
     - "jenkins"
     - "teamcity"
+    - "1С"
 
   ignore_markers:
     - "intern"
