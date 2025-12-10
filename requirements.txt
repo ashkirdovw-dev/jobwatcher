@@ -1,0 +1,4 @@
+﻿telethon
+pyyaml
+python-dotenv
+nltk
