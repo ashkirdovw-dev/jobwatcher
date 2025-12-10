@@ -7,7 +7,7 @@ import asyncio
 from datetime import datetime, timedelta
 from telethon import TelegramClient
 from pathlib import Path
-from dotenv import load_dotenv
+from config_loader import load_config
 from score import score_and_classify
 from collections import Counter
 # -----
@@ -64,11 +64,6 @@ def format_post_block(item: dict) -> str:
 # else:
 #     print(".env NOT FOUND!")
 
-# load_dotenv(dotenv_path=Path(".env"), override=True)
-# from dotenv import dotenv_values
-# print("=== DEBUG raw .env ===")
-# print(dotenv_values())
-# print("=== DEBUG values END ===")
 
 # print("DEBUG raw API_ID =", repr(os.getenv("API_ID")))
 # print("DEBUG raw API_HASH =", repr(os.getenv("API_HASH")))
@@ -91,15 +86,14 @@ DB_PATH = "jobwatcher.db"
 
 
 # ================= 2.0 LOAD CONFIG =================
-config_path = Path("config.yaml")
-if not config_path.exists():
-    print("config.yaml not found. Create it from config.example.yaml and edit channels/markers.")
-    exit(1)
 
-with open(config_path, "r", encoding="utf-8") as f:
-    cfg = yaml.safe_load(f)
+
+conf = load_config()
+cfg = conf["cfg"]
+ENV = conf["env"]
 
 CHANNELS = cfg.get("channels", [])
+
 
 
 # ================= 3.0 - Database initialization =================
@@ -205,7 +199,7 @@ async def fetch_messages(hours: int = 24, batch_size: int = 5):
         return
 
     # вызов общей функции отправки/форматирования
-    await send_results(client, results, TARGET_CHAT, batch_size=batch_size, pause_sec=2.0)
+    await send_results(client, results, TARGET_CHAT, batch_size=batch_size, pause_sec=4.0)
 
 
 """ async def send_results(client, results: list, target_chat_id, batch_size: int = 5, pause_sec: float = 2.0):
