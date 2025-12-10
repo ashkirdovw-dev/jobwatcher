@@ -3,6 +3,7 @@ import json
 import yaml
 import sqlite3
 
+
 import asyncio
 from datetime import datetime, timedelta
 from telethon import TelegramClient
@@ -10,9 +11,10 @@ from pathlib import Path
 from config_loader import load_config
 from score import score_and_classify
 from collections import Counter
+from db import DB
 # -----
 
-
+db = DB(DB_PATH)
 
 
 def build_emoji_bar(score: int, max_slots: int = 3) -> str:
@@ -53,28 +55,6 @@ def format_post_block(item: dict) -> str:
     lines.append("\n_________________________")
     return "\n".join(lines)
 
-
-# ================= 1.0 LOAD ENV =================
-# print("=== DEBUG START ===")
-# print("Working dir:", os.getcwd())
-# print("Files in dir:", os.listdir(os.getcwd()))
-
-# if Path(".env").exists():
-#     print(".env FOUND")
-# else:
-#     print(".env NOT FOUND!")
-
-
-# print("DEBUG raw API_ID =", repr(os.getenv("API_ID")))
-# print("DEBUG raw API_HASH =", repr(os.getenv("API_HASH")))
-# print("DEBUG raw TARGET_CHAT_ID =", repr(os.getenv("TARGET_CHAT_ID")))
-# print("=== DEBUG END ===")
-
-# API_ID = int(os.getenv("API_ID"))
-# API_HASH = os.getenv("API_HASH")
-# TARGET_CHAT = int(os.getenv("TARGET_CHAT_ID"))
-# SESSION = os.getenv("TG_SESSION", "jobwatcher.session")
-# DB_PATH = os.getenv("DB_PATH", "jobs.db")
 
 # ================= 1.0 LOAD ENV =================
 API_ID = 30613985
@@ -200,29 +180,6 @@ async def fetch_messages(hours: int = 24, batch_size: int = 5):
 
     # вызов общей функции отправки/форматирования
     await send_results(client, results, TARGET_CHAT, batch_size=batch_size, pause_sec=4.0)
-
-
-""" async def send_results(client, results: list, target_chat_id, batch_size: int = 5, pause_sec: float = 2.0):
-
-    if not results:
-        await client.send_message(target_chat_id, "Ничего релевантного за период не найдено.")
-        return
-
-    # сортируем по финальному скору (None — в конец)
-    results.sort(key=lambda r: (r.get('final') if r.get('final') is not None else -999), reverse=True)
-
-    for i in range(0, len(results), batch_size):
-        chunk = results[i:i+batch_size]
-        blocks = [format_post_block(r) for r in chunk]
-        msg_text = "\n\n".join(blocks)
-        try:
-            await client.send_message(target_chat_id, msg_text)
-        except Exception as e:
-            print(f"[send_results] Ошибка при отправке: {e}")
-        # пауза между пакетами, чтобы уменьшить риск FloodWait
-        await asyncio.sleep(pause_sec)
-
-    print(f"[send_results] Отправлено {len(results)} элементов в {target_chat_id}.") """
 
 MESSAGE_LIMIT = 4000  # безопасный лимит (Telegram ~4096)
 
