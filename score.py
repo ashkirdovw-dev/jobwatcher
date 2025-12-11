@@ -1,26 +1,5 @@
 # score.py
-"""
-Скоринг маркеров вакансий.
 
-ТЗ реализовано:
-- нормализация (стемминг) русских и английских слов (Snowball / Porter из NLTK),
-- маркеры из config.yaml ожидаются в секции cfg['markers'] с ключами:
-    excellent_markers, acceptable_markers, negative_markers,
-    strong_negative_markers, ignore_markers
-- сравнение делается по нормализованным (стеммированным) фразам,
-  при этом "#qa", "QA", "qa" и т.п. корректно совпадают;
-- если встречается маркер из ignore_markers — обработка останавливается и
-  возвращается final_score = None (но при этом возвращаются все посчитанные суммы/совпадения);
-- все остальные маркеры учитываются в подсчётах;
-- возвращаемая структура:
-    {
-      'final_score': int or None,
-      'positive_sum': int,   # сумма положительных баллов
-      'negative_sum': int,   # сумма отрицательных баллов (как положительное число)
-      'matches': { 'excellent': [...], 'acceptable': [...], 'negative': [...], 'strong_negative': [...], 'ignore': [...] },
-      'summary': str
-    }
-"""
 import re
 import os
 from typing import Dict, List, Tuple

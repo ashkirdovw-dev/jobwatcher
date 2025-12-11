@@ -7,21 +7,31 @@ import asyncio
 import sqlite3
 import json
 import yaml
-from dotenv import load_dotenv
+from config_loader import load_config
 from telethon import TelegramClient, events, Button
 
-load_dotenv()
+# Загружаем конфиг
+conf = load_config()
+cfg = conf["cfg"]
+ENV = conf["env"]
+
+def _parse_chat_id(val, default):
+    if val is None or val == "":
+        return default
+    try:
+        return int(val)
+    except Exception:
+        return val
 
 # Окружение
-API_ID = int(os.getenv("TG_API_ID", "0"))
-API_HASH = os.getenv("TG_API_HASH", "")
-SESSION = os.getenv("TG_SESSION", "job_watcher.session")
-TARGET_CHAT = os.getenv("TARGET_CHAT", "me")  # 'me' = Saved Messages
-DB_PATH = os.getenv("DB_PATH", "jobwatcher.db")
+API_ID = int(ENV.get("TG_API_ID", os.getenv("API_ID", "0")))
+API_HASH = ENV.get("TG_API_HASH", os.getenv("API_HASH", ""))
+SESSION = ENV.get("TG_SESSION", os.getenv("TG_SESSION", os.getenv("SESSION", "job_watcher.session")))
 
-# Загружаем конфиг
-with open("config.yaml", "r", encoding="utf-8") as f:
-    cfg = yaml.safe_load(f)
+_target_from_env = ENV.get("TARGET_CHAT") or ENV.get("TARGET_CHAT_ID") or os.getenv("TARGET_CHAT")
+TARGET_CHAT = _parse_chat_id(_target_from_env, os.getenv("TARGET_CHAT", "me"))
+
+DB_PATH = cfg.get("db_path") or ENV.get("DB_PATH") or os.getenv("DB_PATH", "jobwatcher.db")
 
 CHANNELS = [c for c in cfg.get("channels", []) if c]
 

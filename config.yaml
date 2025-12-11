@@ -141,3 +141,20 @@ context_keywords:
     - "желательно"
     - "nice to have"
     - "prefer"
+
+db_path: ./jobwatcher.db
+
+message_limit: 4000            # максимальная длина одного сообщения (символы)
+pause_sec: 1.2                 # пауза между отправками (сек)
+merge_strategy: by_label        # one of: length, none, by_channel, by_label
+send_summary_first: true       # отправлять сводку первым сообщением
+label_order:                   # порядок групп в сводке (high->low)
+  - good
+  - possible
+  - neutral
+  - negative
+  - strong_negative
+  - ignore
+  - other
+debug_summary: true            # при true — включать подробные debug-поля в summary (для разработки)
+preview_limit: 1500            # сколько символов брать в preview по умолчанию

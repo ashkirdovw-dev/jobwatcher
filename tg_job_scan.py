@@ -2,9 +2,8 @@ import os
 import json
 import yaml
 import sqlite3
-
-
 import asyncio
+
 from datetime import datetime, timedelta
 from telethon import TelegramClient
 from pathlib import Path
@@ -12,79 +11,46 @@ from config_loader import load_config
 from score import score_and_classify
 from collections import Counter
 from db import DB
-# -----
-
-
-def build_emoji_bar(score: int, max_slots: int = 3) -> str:
-    """Возвращает шкалу из green/yellow hearts длиной max_slots.
-    score 0..max_slots -> number of green hearts.
-    Если score <=0 — 0 green (все желтые).
-    """
-    if score is None or score <= 0:
-        green = 0
-    else:
-        green = min(score, max_slots)
-    yellow = max_slots - green
-    return "🟩" * green + "🟨" * yellow
-
-def format_post_block(item: dict) -> str:
-    """
-    Форматирует один пост в текст для отправки в канал.
-    Ожидаемые поля item: channel, msg_id, pos, neg, final, summary, preview
-    """
-    channel = item.get('channel', '')
-    msg_id = item.get('msg_id')
-    # ссылка на пост
-    channel_name = channel.replace('@', '')
-    post_link = f"https://t.me/{channel_name}/{msg_id}"
-    # рейтинг
-    pos = item.get('pos', 0)
-    neg = item.get('neg', 0)
-    final = item.get('final', 0) or 0
-    summary = item.get('summary', '')
-    emoji_bar = build_emoji_bar(final, max_slots=3)
-    # Формируем блок в порядке: источник+ссылка, рейтинг и шкала, заголовок "Содержание", сам текст, разделитель
-    lines = []
-    lines.append(f"Источник: {channel} | Ссылка на пост ({post_link})\n")
-    lines.append(f"Подсчет рейтинга: :arrow_up: {pos}  |  :arrow_down: {neg}  | Итого {final}")
-    lines.append(f"Итог: {summary} {emoji_bar}\n")
-    lines.append("Содержание сообщения\n====================\n")
-    lines.append(item.get('preview', ''))
-    lines.append("\n_________________________")
-    return "\n".join(lines)
-
-
-# ================= 1.0 LOAD ENV =================
-API_ID = 30613985
-API_HASH = "84b69a2aa33d0fa75efe171614b155a7"
-PHONE = "+79608133326"
-TARGET_CHAT = -1003309146574
-SESSION = "job_watcher.session"
-DB_PATH = "jobwatcher.db"
-
-
-# ================= 2.0 LOAD CONFIG =================
+from formatter import format_post_block  
 
 
 conf = load_config()
 cfg = conf["cfg"]
 ENV = conf["env"]
 
+# helper: parse chat id to int if possible, otherwise return as-is (string)
+def _parse_chat_id(val, default):
+    if val is None or val == "":
+        return default
+    try:
+        return int(val)
+    except Exception:
+        return val
+
+# use ENV values first; fallback to prior hardcoded defaults or cfg/os envs
+API_ID = int(ENV.get("TG_API_ID", os.getenv("API_ID", "0")))
+API_HASH = ENV.get("TG_API_HASH", os.getenv("API_HASH", ""))
+PHONE = ENV.get("PHONE", os.getenv("PHONE", "+79608133326"))
+SESSION = ENV.get("TG_SESSION", os.getenv("TG_SESSION", os.getenv("SESSION", "job_watcher.session")))
+
+_target_from_env = ENV.get("TARGET_CHAT") or ENV.get("TARGET_CHAT_ID") or os.getenv("TARGET_CHAT")
+TARGET_CHAT = _parse_chat_id(_target_from_env, os.getenv("TARGET_CHAT", -1003309146574))
+
+DB_PATH = cfg.get("db_path") or ENV.get("DB_PATH") or os.getenv("DB_PATH", "jobwatcher.db")
+
 CHANNELS = cfg.get("channels", [])
 
 
-
-# ================= 3.0 - Database initialization =================
+# 3.0 - Db init
 
 db = DB(DB_PATH)
 print("DEBUG: DB initialized, columns in 'seen':", db.get_columns())
 
-
-# ================= 4.0 TELETHON =================
+# 4.0 TELETHON 
 client = TelegramClient(SESSION, API_ID, API_HASH)
 
 
-# ================= 4.0 SCAN HISTORY =================
+# 4.0 SCAN HISTORY
 async def scan_history(client: TelegramClient, hours: int = 24, limit_per_channel: int = 2000):
     since = datetime.utcnow() - timedelta(hours=hours)
     results = []
@@ -145,7 +111,7 @@ async def scan_history(client: TelegramClient, hours: int = 24, limit_per_channe
     return results
 
 
-# ================= 5.0 FETCH MESSAGES =================
+# 6.0 FETCH MESSAGES
 
 async def fetch_messages(hours: int = 24, batch_size: int = 5):
     """
@@ -262,7 +228,7 @@ async def send_results(client, results: list, target_chat_id, batch_size=None, p
 
     print(f"[send_results] Отправлено {sent} из {total}, упало {failed}.")
 
-# ================= 6.0 MAIN =================
+# ================= 7.0 MAIN =================
 async def main():
     await client.start(phone=PHONE)
 
